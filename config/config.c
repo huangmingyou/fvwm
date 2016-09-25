@@ -26,8 +26,13 @@ struct cmd_ent {
 	const char	*getopt;
 };
 
+enum parsing_state {
+	PARSING_LINE = 0,
+	PARSING_HEREDOC
+};
+
 /* Forward declarations. */
-int	 args_comp(struct args_comp *, struct args_comp *);
+int	 args_cmp(struct args_comp *, struct args_comp *);
 
 int args_cmp(struct args_comp *ac1, struct args_comp *ac2)
 {
@@ -38,10 +43,11 @@ RB_GENERATE(args_tree, args_comp, ent, args_cmp);
 
 int main(const char *argc, int argv)
 {
-	FILE		*f;
-	size_t	 	 line;
-	char		*buf = NULL, *cp;
-	const char 	*config = "./config_file";
+	FILE			*f;
+	size_t	 	 	 line = 0;
+	char			*buf = NULL, *cp;
+	const char 		*config = "./config_file", *hd_end;
+	enum parsing_state	 ps = PARSING_LINE;
 
 	if ((f = fopen(config, "rb")) == NULL) {
 		fprintf(stderr, "Couldn't open '%s': %s\n",
@@ -58,7 +64,30 @@ int main(const char *argc, int argv)
 			continue;
 		}
 
-		printf("%s [%d]: <<%s>>\n", config, line, buf);
+		switch (ps) {
+		case PARSING_LINE:
+			printf("%s [%d]: <<%s>>\n", config, line, cp);
+			break;
+		case PARSING_HEREDOC:
+			if ((hd_end != NULL && strcmp(buf, hd_end) == 0)) {
+				free(buf);
+				free((char *)hd_end);
+				cp = NULL;
+
+				continue;
+			}
+			printf("\t[HD]: %s\n", cp);
+			break;
+		default:
+			break;
+		}
+
+		if ((cp = strstr(cp, "<<")) != NULL) {
+			cp += 2;
+			ps = PARSING_HEREDOC;
+
+			hd_end = strdup(cp);
+		}
 	}
 
 	return (EXIT_SUCCESS);
